@@ -1,0 +1,13 @@
+name: StatsExtractor
+version: '${project.version}'
+main: net.kunmc.lab.statsextractor.StatsExtractor
+api-version: 1.16
+authors: [ Kamesuta ]
+
+permissions:
+  stats-extract:
+    default: op
+
+commands:
+  stats-players:
+    permission: stats-extract
