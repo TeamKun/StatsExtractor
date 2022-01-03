@@ -1,6 +1,7 @@
 package net.kunmc.lab.statsextractor;
 
 import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVPrinter;
 import org.bukkit.Bukkit;
 import org.bukkit.Material;
@@ -16,12 +17,16 @@ import org.bukkit.scoreboard.Team;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.File;
+import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public final class StatsExtractor extends JavaPlugin {
@@ -45,11 +50,26 @@ public final class StatsExtractor extends JavaPlugin {
                     try {
                         // フォルダを作成
                         getDataFolder().mkdirs();
+                        // メンバーリストを読み込み
+                        File memberPath = new File(getDataFolder(), "stats-members.csv");
+                        List<String> members = new ArrayList<>();
+                        if (memberPath.exists()) {
+                            FileReader in = new FileReader(memberPath);
+                            CSVParser parser = CSVFormat.Builder.create()
+                                    .setHeader("Name")
+                                    .setSkipHeaderRecord(false)
+                                    .build()
+                                    .parse(in);
+                            members = parser.getRecords().stream()
+                                    .filter(e -> e.size() > 0)
+                                    .map(e -> e.get(0))
+                                    .collect(Collectors.toList());
+                        }
                         // 書き出し先ファイル
-                        File path = new File(getDataFolder(), "stats-export.csv");
-                        FileWriter out = new FileWriter(path);
+                        File statsPath = new File(getDataFolder(), "stats-export.csv");
+                        FileWriter out = new FileWriter(statsPath);
                         // CSVのヘッダーを設定
-                        CSVFormat format = CSVFormat.Builder.create()
+                        CSVFormat statsFormat = CSVFormat.Builder.create()
                                 .setHeader(Stream.concat(
                                         Stream.of("UUID", "Name", "Team"),
                                         Arrays.stream(Statistic.values()).map(Statistic::name)
@@ -61,7 +81,7 @@ public final class StatsExtractor extends JavaPlugin {
                         int max = offlinePlayers.length;
                         int now = 0;
                         // CSV書き込み開始
-                        try (CSVPrinter printer = new CSVPrinter(out, format)) {
+                        try (CSVPrinter printer = new CSVPrinter(out, statsFormat)) {
                             for (OfflinePlayer player : offlinePlayers) {
                                 // 進捗を表示 (処理に時間がかかるため)
                                 sender.sendMessage(String.format("書き出し中(%d/%d): %s", ++now, max, player.getName()));
@@ -105,9 +125,28 @@ public final class StatsExtractor extends JavaPlugin {
                                         })
                                 ).toArray(Object[]::new));
                             }
+                            // 一度もログインしていない人を抽出
+                            List<String> memberWithLogin = Arrays.stream(offlinePlayers)
+                                    .map(OfflinePlayer::getName)
+                                    .collect(Collectors.toList());
+                            List<String> memberWithoutLogin = members.stream()
+                                    .filter(e -> !memberWithLogin.contains(e))
+                                    .collect(Collectors.toList());
+                            for (String player : memberWithoutLogin) {
+                                printer.printRecord(Stream.concat(
+                                        // UUID, プレイヤー名, チーム
+                                        Stream.of(
+                                                "",
+                                                player,
+                                                ""
+                                        ),
+                                        // 統計情報
+                                        Arrays.stream(Statistic.values()).map(stat -> 0)
+                                ).toArray(Object[]::new));
+                            }
                         }
                         // どこに保存されたか出力
-                        sender.sendMessage("書き出しに成功しました: " + path.getAbsolutePath());
+                        sender.sendMessage("書き出しに成功しました: " + statsPath.getAbsolutePath());
                     } catch (IOException e) {
                         // エラー通知
                         sender.sendMessage("書き出しに失敗しました。");
